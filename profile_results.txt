@@ -1,0 +1,240 @@
+Timer unit: 1e-06 s
+
+Total time: 2.7012 s
+File: /Users/im01zhas/Code/Nikhil/Scheduler/backend/app/services/plan_service.py
+Function: create_plan at line 15
+
+Line #      Hits         Time  Per Hit   % Time  Line Contents
+==============================================================
+    15                                               @profile
+    16                                               def create_plan(self, request):
+    17         1          1.0      1.0      0.0          def determine_current_quarter():
+    18                                                       current_date = datetime.now()
+    19                                                       current_month = current_date.month
+    20                                                       current_year = current_date.year
+    21                                                       
+    22                                                       if 3 <= current_month <= 8:
+    23                                                           curr_quarter = 0
+    24                                                           quarter_year = current_year
+    25                                                       else:
+    26                                                           curr_quarter = 1
+    27                                                           if current_month >= 9:
+    28                                                               quarter_year = current_year
+    29                                                           else:
+    30                                                               quarter_year = current_year - 1
+    31                                           
+    32                                                       return curr_quarter, quarter_year
+    33                                           
+    34         1          1.0      1.0      0.0          def _fetch_items(codes):
+    35                                                       if not codes:
+    36                                                           return []
+    37                                                       return Item.query.filter(Item.item_group_id.in_(codes)).all()
+    38                                                   
+    39         1         51.0     51.0      0.0          data = request.json
+    40         1          0.0      0.0      0.0          if not data:
+    41                                                       return jsonify(status_code=400, result="error")
+    42                                           
+    43         1          1.0      1.0      0.0          manufacturing_codes = set(data.get('manufacturing_codes', []))
+    44         1          0.0      0.0      0.0          secondary_codes = set(data.get('secondary_codes', []))
+    45         1          1.0      1.0      0.0          additional_codes = set(data.get('additional_codes', []))
+    46         1          0.0      0.0      0.0          extra_codes = set(data.get('extra_codes', []))
+    47                                           
+    48         1          0.0      0.0      0.0          items = set()
+    49         1          0.0      0.0      0.0          extra_items = set()
+    50                                           
+    51         1      11049.0  11049.0      0.4          items.update(_fetch_items(manufacturing_codes))
+    52         1          1.0      1.0      0.0          items.update(_fetch_items(secondary_codes))
+    53         1          0.0      0.0      0.0          items.update(_fetch_items(additional_codes))
+    54         1          1.0      1.0      0.0          extra_items.update(_fetch_items(extra_codes))
+    55                                           
+    56        25         23.0      0.9      0.0          items_dict = {item.code_name: item for item in items}
+    57         1          0.0      0.0      0.0          extra_items_dict = {item.code_name: item for item in extra_items}
+    58                                           
+    59         1         17.0     17.0      0.0          curr_quarter, quarter_year = determine_current_quarter()
+    60         1          1.0      1.0      0.0          all_item_codes = list(items_dict.keys())
+    61         1          0.0      0.0      0.0          extra_item_codes = list(extra_items_dict.keys())
+    62                                           
+    63         1          0.0      0.0      0.0          plan_data = []
+    64                                           
+    65         6          1.0      0.2      0.0          while all_item_codes:
+    66         5          0.0      0.0      0.0              data = {}
+    67         5          6.0      1.2      0.0              data['quarter_label'] = self.quarters[curr_quarter]['name'] + "-" + str(quarter_year)
+    68         5          1.0      0.2      0.0              data['quarter_num'] = curr_quarter + 1
+    69         5          0.0      0.0      0.0              data['quarter_year'] = quarter_year
+    70         5          2.0      0.4      0.0              data['total_units'] = 0
+    71         5          0.0      0.0      0.0              quarter_items = []
+    72                                           
+    73        31         29.0      0.9      0.0              while all_item_codes and data['total_units'] + items_dict[all_item_codes[0]].units <= self.quarters[curr_quarter]['limit']:
+    74        26          5.0      0.2      0.0                  item_code = all_item_codes.pop(0)
+    75        26          3.0      0.1      0.0                  item = items_dict[item_code]
+    76                                           
+    77        26         16.0      0.6      0.0                  if item.simultaneous and item.simultaneous in items_dict:
+    78                                                               simultaneous_item = items_dict[item.simultaneous]
+    79                                                               if data['total_units'] + item.units + simultaneous_item.units <= self.quarters[curr_quarter]['limit']:
+    80                                                                   all_item_codes.remove(item.simultaneous)
+    81                                                               else:
+    82                                                                   all_item_codes.insert(0, item_code)
+    83                                                                   continue
+    84                                           
+    85        26         69.0      2.7      0.0                  predecessorArray = eval(item.predecessor) if item.predecessor else []
+    86                                           
+    87        26          2.0      0.1      0.0                  if predecessorArray:
+    88        10          3.0      0.3      0.0                      for preItem in predecessorArray:
+    89         5         11.0      2.2      0.0                          if any(_quarter_item['code_name'] == preItem for _quarter_item in quarter_items):
+    90         2          0.0      0.0      0.0                              all_item_codes.append(item_code)
+    91         2          0.0      0.0      0.0                              continue
+    92                                           
+    93        26         12.0      0.5      0.0                  quarter_item = {
+    94        26          6.0      0.2      0.0                      'locked': False,
+    95        26          3.0      0.1      0.0                      'done': False,
+    96        26         16.0      0.6      0.0                      'item_id': item.id,
+    97        26         10.0      0.4      0.0                      'code_name': item.code_name,
+    98        26         14.0      0.5      0.0                      'letter': item.display,
+    99        26         15.0      0.6      0.0                      'units': item.units,
+   100        26         12.0      0.5      0.0                      'predecessor': item.predecessor,
+   101        26         15.0      0.6      0.0                      'simultaneous': item.simultaneous,
+   102        26         15.0      0.6      0.0                      'term': item.terms,
+   103        26         14.0      0.5      0.0                      'standing': item.standing
+   104                                                           }
+   105        26          3.0      0.1      0.0                  quarter_items.append(quarter_item)
+   106        26         20.0      0.8      0.0                  data['total_units'] += item.units
+   107                                           
+   108         5          4.0      0.8      0.0              curr_quarter = (curr_quarter + 1) % len(self.quarters)
+   109         5          1.0      0.2      0.0              if curr_quarter == 0:
+   110         2          0.0      0.0      0.0                  quarter_year += 1
+   111                                           
+   112         5          0.0      0.0      0.0              data['items'] = quarter_items
+   113         5          2.0      0.4      0.0              plan_data.append(data)
+   114                                           
+   115         1        672.0    672.0      0.0          json_data, plan_data = self._recalculate_plan(plan_data, extra_item_codes)
+   116         1         57.0     57.0      0.0          ans_dict = json.loads(json_data.get_data(as_text=True))
+   117                                           
+   118         1         73.0     73.0      0.0          ans_dict["quarters"] = sorted(json.loads(ans_dict["quarters"]), key=lambda x: (x['quarter_year'], x['quarter_num']))
+   119                                           
+   120         1    2095236.0    2e+06     77.6          requirements = Requirement.query.all()
+   121    146101     417972.0      2.9     15.5          results = [req.to_dict() for req in requirements]
+   122         1     119309.0 119309.0      4.4          json_result = json.dumps(results, ensure_ascii=False)
+   123         1          1.0      1.0      0.0          ans_dict['reqs'] = json_result
+   124                                           
+   125         1      56418.0  56418.0      2.1          return jsonify(ans_dict)
+
+Total time: 0.000547 s
+File: /Users/im01zhas/Code/Nikhil/Scheduler/backend/app/services/plan_service.py
+Function: _recalculate_plan at line 126
+
+Line #      Hits         Time  Per Hit   % Time  Line Contents
+==============================================================
+   126                                               @profile
+   127                                               def _recalculate_plan(self, quarters, extra_item_codes=[], items=[]):
+   128         1          2.0      2.0      0.4          def add_simultaneous_items(item, quarter, movable_items_dict):
+   129                                                       simultaneous_item_code = item['simultaneous']
+   130                                                       simultaneous_item = movable_items_dict.get(simultaneous_item_code)
+   131                                                       if not simultaneous_item:
+   132                                                           raise ValueError(f"Simultaneous item {simultaneous_item_code} not found in movable items")
+   133                                           
+   134                                                       quarter_limit = self.quarters[quarter['quarter_num'] - 1]['limit']
+   135                                                       total_units = item['units'] + simultaneous_item['units']
+   136                                                       if total_units + quarter['total_units'] <= quarter_limit:
+   137                                                           quarter['items'].append(simultaneous_item)
+   138                                                           quarter['total_units'] += simultaneous_item['units']
+   139                                                           del movable_items_dict[simultaneous_item_code]
+   140                                                       else:
+   141                                                           raise ValueError(f"Not enough space for simultaneous item {simultaneous_item_code}")
+   142                                           
+   143         1          0.0      0.0      0.0          def add_predecessor_items(pred_array, quarter_index, response_quarters, movable_items_dict):
+   144                                                       for pre_item_code in pred_array:
+   145                                                           pre_item = movable_items_dict.get(pre_item_code)
+   146                                                           if not pre_item:
+   147                                                               continue
+   148                                           
+   149                                                           for i in range(quarter_index):
+   150                                                               quarter_limit = self.quarters[response_quarters[i]['quarter_num'] - 1]['limit']
+   151                                                               if pre_item['units'] + response_quarters[i]['total_units'] <= quarter_limit:
+   152                                                                   response_quarters[i]['items'].append(pre_item)
+   153                                                                   response_quarters[i]['total_units'] += pre_item['units']
+   154                                                                   del movable_items_dict[pre_item_code]
+   155                                                                   break
+   156                                           
+   157         1          0.0      0.0      0.0          def handle_locked_items(quarter, movable_items_dict, response_quarters, extra_item_codes_set):
+   158                                                       for item in quarter['items']:
+   159                                                           if item['locked']:
+   160                                                               try:
+   161                                                                   if item['simultaneous']:
+   162                                                                       add_simultaneous_items(item, quarter, movable_items_dict)
+   163                                           
+   164                                                                   if item['predecessor']:
+   165                                                                       pred_array = json.loads(item['predecessor'].replace("'", "\""))
+   166                                                                       pred_array = [code for code in pred_array if code not in extra_item_codes_set]
+   167                                                                       if pred_array:
+   168                                                                           if response_quarters.index(quarter) == 0:
+   169                                                                               raise ValueError(f"{item['code_name']} has predecessors and can't be locked in the first quarter")
+   170                                                                           add_predecessor_items(pred_array, response_quarters.index(quarter), response_quarters, movable_items_dict)
+   171                                                               except Exception as e:
+   172                                                                   return jsonify(status_code=404, message=str(e), quarters=[])
+   173                                           
+   174         1          0.0      0.0      0.0          def process_movable_items(response_quarters, movable_items_dict, extra_item_codes_set):
+   175                                                       for movable_item_code, movable_item in list(movable_items_dict.items()):
+   176                                                           if movable_item['predecessor']:
+   177                                                               pred_array = json.loads(movable_item['predecessor'].replace("'", "\""))
+   178                                                               pred_array = [code for code in pred_array if code not in extra_item_codes_set]
+   179                                                               if pred_array:
+   180                                                                   try:
+   181                                                                       add_predecessor_items(pred_array, len(response_quarters) - 1, response_quarters, movable_items_dict)
+   182                                                                   except Exception as e:
+   183                                                                       if str(e) == "Pred items can't be placed in previous quarters":
+   184                                                                           continue
+   185                                                                       else:
+   186                                                                           return jsonify(status_code=404, message=str(e), quarters=[])
+   187                                           
+   188         1          0.0      0.0      0.0          def add_new_quarter(response_quarters, item):
+   189                                                       new_quarter_num = (response_quarters[-1]['quarter_num'] + 1) % len(self.quarters)
+   190                                                       new_quarter_year = response_quarters[-1]['quarter_year'] + (1 if new_quarter_num == 0 else 0)
+   191                                                       new_quarter = {
+   192                                                           'quarter_label': f"{self.quarters[new_quarter_num]['name']}-{new_quarter_year}",
+   193                                                           'quarter_num': new_quarter_num + 1,
+   194                                                           'quarter_year': new_quarter_year,
+   195                                                           'total_units': item['units'],
+   196                                                           'items': [item]
+   197                                                       }
+   198                                                       response_quarters.append(new_quarter)
+   199                                           
+   200         1          0.0      0.0      0.0          extra_item_codes_set = set(extra_item_codes)
+   201        32          8.0      0.2      1.5          movable_items_dict = {item['code_name']: item for quarter in quarters for item in quarter['items'] if not item['locked']}
+   202         1          0.0      0.0      0.0          response_quarters = quarters
+   203                                           
+   204         6          0.0      0.0      0.0          for quarter in response_quarters:
+   205         5         15.0      3.0      2.7              handle_locked_items(quarter, movable_items_dict, response_quarters, extra_item_codes_set)
+   206                                           
+   207        24         14.0      0.6      2.6          while movable_items_dict:
+   208        23          1.0      0.0      0.2              item_code, item = movable_items_dict.popitem()
+   209        23        202.0      8.8     36.9              process_movable_items(response_quarters, movable_items_dict, extra_item_codes_set)
+   210       157         28.0      0.2      5.1              for quarter in response_quarters:
+   211       153         12.0      0.1      2.2                  quarter_limit = self.quarters[quarter['quarter_num'] - 1]['limit']
+   212       153         33.0      0.2      6.0                  if item['units'] + quarter['total_units'] <= quarter_limit:
+   213        19         10.0      0.5      1.8                      quarter['items'].append(item)
+   214        19          2.0      0.1      0.4                      quarter['total_units'] += item['units']
+   215        19          0.0      0.0      0.0                      break
+   216                                                       else:
+   217         4         10.0      2.5      1.8                  add_new_quarter(response_quarters, item)
+   218                                           
+   219        10          3.0      0.3      0.5          response_quarters = [quarter for quarter in response_quarters if quarter['items']]
+   220                                           
+   221         1        207.0    207.0     37.8          return jsonify(status_code=201, message='', quarters=json.dumps(response_quarters), done=json.dumps(items)), response_quarters
+
+Total time: 2.97077 s
+File: create_plan_route.py
+Function: create_plan_profile at line 4
+
+Line #      Hits         Time  Per Hit   % Time  Line Contents
+==============================================================
+     4                                           @profile
+     5                                           def create_plan_profile():
+     6         2       4715.0   2357.5      0.2      with app.test_client() as client:
+     7         1          1.0      1.0      0.0          data = {
+     8         1          0.0      0.0      0.0              "manufacturing_codes": ["C4"],
+     9         1          0.0      0.0      0.0              "secondary_codes": [],
+    10         1          0.0      0.0      0.0              "additional_codes": [],
+    11         1          0.0      0.0      0.0              "extra_codes": []
+    12                                                   }
+    13         1    2966056.0    3e+06     99.8          client.post('/create-plan', json=data)
+
